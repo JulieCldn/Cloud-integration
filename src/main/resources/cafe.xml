@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:int="http://www.springframework.org/schema/integration"
+       xmlns:int-file="http://www.springframework.org/schema/integration/file"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/integration
+           http://www.springframework.org/schema/integration/spring-integration-5.1.xsd
+           http://www.springframework.org/schema/integration/file
+           http://www.springframework.org/schema/integration/file/spring-integration-file-5.1.xsd">
+
+    <int-file:inbound-channel-adapter
+            channel="mainChannel"
+            directory="dataIn"
+            filename-pattern="*.json">
+        <int:poller id="poller" fixed-delay="1000" />
+    </int-file:inbound-channel-adapter>
+
+    <int:channel  id="mainChannel"/>
+
+    <int:json-to-object-transformer input-channel="mainChannel" output-channel="objectChannel" type="test.Client"/>
+
+    <int:channel  id="objectChannel"/>
+
+    <int:recipient-list-router id="router1" input-channel="objectChannel">
+        <int:recipient channel="commandePrise"/>
+        <int:recipient channel="objectChannel"/>
+    </int:recipient-list-router>
+
+    <int:filter input-channel="objectChannel" output-channel="sansCommande"
+                expression="payload.getCommandeTaken().equals(false) "/>
+
+    <int:channel id="sansCommande"/>
+
+    <int:service-activator id="ServiceActivator1" input-channel="sansCommande"
+                           output-channel = "commandePrise" method="myService">
+        <bean class="test.TakeCommande"/>
+    </int:service-activator>
+
+    <int:channel id="commandePrise"/>
+
+    <int:recipient-list-router id="router2" input-channel="commandePrise">
+        <int:recipient channel="routerChannel1"/>
+        <int:recipient channel="routerChannel4"/>
+    </int:recipient-list-router>
+
+    <int:channel id="routerChannel4"/>
+
+    <int:logging-channel-adapter id="routerChannel1" level="INFO"/>
+
+    <int:aggregator id="myAggregator"
+                    input-channel="routerChannel4"
+                    output-channel="aggregatorChannel"
+                    correlation-strategy-expression="payload.orderNum"
+                    release-strategy-expression="size()==3">
+    </int:aggregator>
+
+    <int:channel id="aggregatorChannel"/>
+
+    <int:object-to-json-transformer input-channel="commandePrise" output-channel="filesOut"/>
+
+    <int:channel id="filesOut"/>
+    <int-file:outbound-channel-adapter id="f" channel="filesOut" directory="dataOut/orderTaken"/>
+</beans>
